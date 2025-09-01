@@ -1,0 +1,27 @@
+functions:
+  uploadImage:
+    handler: media/handler.upload_image
+    events:
+      - http:
+          path: upload
+          method: post
+          cors: true
+
+resources:
+  Resources:
+    MediaBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:service}-${opt:stage, self:provider.stage}-bucket
+        AccessControl: PublicRead
+        CorsConfiguration:
+          CorsRules:
+            - AllowedOrigins:
+                - "*"
+              AllowedMethods:
+                - GET
+                - PUT
+                - POST
+                - DELETE
+              AllowedHeaders:
+                - "*"
