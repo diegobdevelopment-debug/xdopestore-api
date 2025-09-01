@@ -1,0 +1,22 @@
+service: store-api
+
+provider:
+  name: aws
+  runtime: python3.9
+  region: us-east-1
+  environment:
+    STAGE: ${sls:stage}
+    TABLE_PREFIX: xdopestore-api-${sls:stage}-
+
+plugins:
+  - serverless-python-requirements
+
+functions:
+  ${file(homepage/service.yml):functions}
+  ${file(media/service.yml):functions}
+
+resources:
+  Resources:
+    ${file(homepage/service.yml):resources.Resources}
+    ${file(media/service.yml):resources.Resources}
+
