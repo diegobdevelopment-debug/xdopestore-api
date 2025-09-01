@@ -13,10 +13,8 @@ plugins:
 
 functions:
   ${file(homepage/service.yml):functions}
-  ${file(media/service.yml):functions}
 
 resources:
   Resources:
     ${file(homepage/service.yml):resources.Resources}
-    ${file(media/service.yml):resources.Resources}
 

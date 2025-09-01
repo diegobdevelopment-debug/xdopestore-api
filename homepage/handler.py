@@ -1,9 +1,10 @@
 import json
 import os
 import boto3
+
 from boto3.dynamodb.conditions import Key
 from datetime import datetime
-
+from shared.s3_utils import process_image_field
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["TABLE_NAME"])
 
@@ -47,14 +48,19 @@ def update_config(event, context):
     try:
         body = json.loads(event["body"])
 
-        # fetch existing versions
+        # process image (base64 → S3 url)
+        body = process_image_field(body)
+
+        # --- Fetch existing versions (last 3 only) ---
         existing = table.query(
             KeyConditionExpression=Key("id").eq(HOMEPAGE_ID),
-            ScanIndexForward=False
+            ScanIndexForward=False,   # newest first
+            Limit=3
         ).get("Items", [])
 
         # determine new version number
-        new_version = (existing[0]["version"] + 1) if existing else 1
+        latest_version = max([x["version"] for x in existing], default=0)
+        new_version = latest_version + 1
 
         # save new version
         item = {
@@ -67,16 +73,19 @@ def update_config(event, context):
 
         # keep only last 3
         if len(existing) >= 3:
-            oldest = min(existing, key=lambda x: x["version"])
-            table.delete_item(Key={"id": HOMEPAGE_ID, "version": oldest["version"]})
+            oldest_version = min(x["version"] for x in existing)
+            table.delete_item(Key={"id": HOMEPAGE_ID, "version": oldest_version})
 
         return {
             "statusCode": 200,
-            "body": json.dumps({"message": "Homepage config updated", "data": item})
+            "body": json.dumps({
+                "message": "Homepage config updated",
+                "data": item
+            })
         }
+
     except Exception as e:
         return {"statusCode": 500, "body": str(e)}
-
 
 # ---- DELETE all configs ----
 def delete_config(event, context):
