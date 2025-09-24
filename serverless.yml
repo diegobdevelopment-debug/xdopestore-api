@@ -1,4 +1,5 @@
 service: store-api
+frameworkVersion: "3"
 
 provider:
   name: aws

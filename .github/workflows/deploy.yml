@@ -22,9 +22,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Install Serverless
-        run: npm install -g serverless
-
+      - name: Install Serverless v3
+        run: npm install -g serverless@3
+      
       - name: Deploy Homepage API
         run: sls deploy --stage prod
         env:
