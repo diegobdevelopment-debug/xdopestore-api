@@ -11,6 +11,14 @@ jobs:
   deploy-homepage:
     runs-on: ubuntu-latest
     steps:
+
+      - name: Check AWS secrets
+        run: |
+          if [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ] || [ -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+            echo "❌ AWS credentials not set in GitHub Secrets"
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
