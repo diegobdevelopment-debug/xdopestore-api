@@ -28,16 +28,9 @@ jobs:
       - name: Install Serverless
         run: npm install -g serverless
 
-      - name: Echo instead of Deploy Homepage API
-        run: echo "Skipping deployment of Homepage API until AWS is configured"
-        # run: sls deploy --stage prod
-        # env:
-        #   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        #   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      - name: Deploy Homepage API
+        run: sls deploy --stage prod
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-#      - name: Deploy Homepage API
-#        run: sls deploy --stage prod
-#        env:
-#          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-#          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-#
