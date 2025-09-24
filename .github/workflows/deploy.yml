@@ -10,9 +10,6 @@ on:
 jobs:
   deploy-homepage:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: homepage
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,7 +20,7 @@ jobs:
           python-version: '3.13'
 
       - name: Install dependencies
-        run: pip install -r ../requirements.txt
+        run: pip install -r requirements.txt
 
       - name: Install Serverless
         run: npm install -g serverless
