@@ -6,12 +6,9 @@ on:
       - main
     paths:
       - 'homepage/**'
-      - 'products/**'
-      - 'categories/**'
 
 jobs:
   deploy-homepage:
-    if: contains(github.event.head_commit.message, '[homepage]') || contains(join(github.event.commits.*.modified, ','), 'homepage/')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -44,56 +41,3 @@ jobs:
 #          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
 #          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 #
-#  deploy-products:
-#    if: contains(github.event.head_commit.message, '[products]') || contains(join(github.event.commits.*.modified, ','), 'products-api/')
-#    runs-on: ubuntu-latest
-#    defaults:
-#      run:
-#        working-directory: products-api
-#    steps:
-#      - name: Checkout repository
-#        uses: actions/checkout@v4
-#
-#      - name: Setup Python
-#        uses: actions/setup-python@v5
-#        with:
-#          python-version: '3.11'
-#
-#      - name: Install dependencies
-#        run: pip install -r requirements.txt
-#
-#      - name: Install Serverless
-#        run: npm install -g serverless
-#
-#      - name: Deploy Products API
-#        run: sls deploy --stage prod
-#        env:
-#          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-#          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-#
-#  deploy-categories:
-#    if: contains(github.event.head_commit.message, '[categories]') || contains(join(github.event.commits.*.modified, ','), 'categories-api/')
-#    runs-on: ubuntu-latest
-#    defaults:
-#      run:
-#        working-directory: categories-api
-#    steps:
-#      - name: Checkout repository
-#        uses: actions/checkout@v4
-#
-#      - name: Setup Python
-#        uses: actions/setup-python@v5
-#        with:
-#          python-version: '3.11'
-#
-#      - name: Install dependencies
-#        run: pip install -r requirements.txt
-#
-#      - name: Install Serverless
-#        run: npm install -g serverless
-#
-#      - name: Deploy Categories API
-#        run: sls deploy --stage prod
-#        env:
-#          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-#          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
