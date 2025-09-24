@@ -3,16 +3,27 @@ frameworkVersion: "3"
 
 provider:
   name: aws
-  runtime: python3.9
+  runtime: python3.11
   region: us-east-1
   stage: ${sls:stage}
   environment:
     STAGE: ${sls:stage}
     TABLE_PREFIX: xdopestore-api-${sls:stage}-
-
-plugins:
-  - serverless-python-requirements
-
+    TABLE_NAME:
+      Ref: HomepageConfigTable
+  iam:
+    role:
+      statements:
+        - Effect: "Allow"
+          Action:
+            - "dynamodb:Query"
+            - "dynamodb:GetItem"
+            - "dynamodb:PutItem"
+            - "dynamodb:UpdateItem"
+            - "dynamodb:DeleteItem"
+          Resource:
+            - Fn::GetAtt: [HomepageConfigTable, Arn]
+              
 functions:
   ${file(homepage/service.yml):functions}
 

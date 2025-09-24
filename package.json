@@ -18,6 +18,6 @@
   },
   "homepage": "https://github.com/diegobdevelopment-debug/xdopestore-api#readme",
   "devDependencies": {
-    "serverless-python-requirements": "^6.1.2"
+    "serverless": "^3.39.0"
   }
 }
