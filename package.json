@@ -1,0 +1,23 @@
+{
+  "name": "xdopestore-api",
+  "version": "1.0.0",
+  "description": "This repository contains the backend for **Store API**, organized into separate **microservices** using the [Serverless Framework](https://www.serverless.com/).  \r Each service is independently deployable and versioned, making the project **scalable and modular**.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/diegobdevelopment-debug/xdopestore-api.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/diegobdevelopment-debug/xdopestore-api/issues"
+  },
+  "homepage": "https://github.com/diegobdevelopment-debug/xdopestore-api#readme",
+  "devDependencies": {
+    "serverless-python-requirements": "^6.1.2"
+  }
+}
