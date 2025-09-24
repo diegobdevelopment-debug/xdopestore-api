@@ -10,6 +10,7 @@ on:
 jobs:
   deploy-homepage:
     runs-on: ubuntu-latest
+    environment: prod
     steps:
 
       - name: Check AWS secrets
