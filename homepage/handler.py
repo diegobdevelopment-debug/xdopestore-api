@@ -2,7 +2,6 @@ import json
 import os
 import boto3
 
-
 from boto3.dynamodb.conditions import Key
 from datetime import datetime
 from shared.s3_utils import process_image_field
