@@ -34,19 +34,6 @@ functions:
             type: COGNITO_USER_POOLS
             authorizerId:
               Ref: ApiGatewayAuthorizer
-    iamRoleStatements:
-      - Effect: Allow
-        Action:
-          - s3:PutObject
-          - s3:GetObject
-          - s3:DeleteObject
-        Resource:
-          - arn:aws:s3:::${self:service}-${self:provider.stage}-bucket/*
-      - Effect: Allow
-        Action:
-          - s3:ListBucket
-        Resource:
-          - arn:aws:s3:::${self:service}-${self:provider.stage}-bucket
 
   deleteConfig:
     handler: homepage/handler.delete_config

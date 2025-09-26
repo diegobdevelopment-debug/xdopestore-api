@@ -11,6 +11,8 @@ provider:
     TABLE_PREFIX: xdopestore-api-${sls:stage}-
     TABLE_NAME:
       Ref: HomepageConfigTable
+    MEDIA_BUCKET:
+      Ref: MediaBucket
   iam:
     role:
       statements:
@@ -23,7 +25,20 @@ provider:
             - "dynamodb:DeleteItem"
           Resource:
             - Fn::GetAtt: [HomepageConfigTable, Arn]
-              
+
+        - Effect: "Allow"
+          Action:
+            - "s3:PutObject"
+            - "s3:GetObject"
+            - "s3:DeleteObject"
+          Resource:
+            - !Sub "${MediaBucket.Arn}/*"
+        - Effect: "Allow"
+          Action:
+            - "s3:ListBucket"
+          Resource:
+            - !GetAtt "MediaBucket.Arn"
+
 functions:
   ${file(homepage/service.yml):functions}
 
