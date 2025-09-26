@@ -18,8 +18,7 @@ def upload_image(file_content: bytes, file_extension: str) -> str:
         Bucket=BUCKET,
         Key=key,
         Body=file_content,
-        ContentType=f"image/{file_extension}",
-        ACL="public-read"  # keep public for now
+        ContentType=f"image/{file_extension}"
     )
 
     return f"https://{BUCKET}.s3.amazonaws.com/{key}"
