@@ -82,7 +82,7 @@ def update_config(event, context):
             "body": json.dumps({
                 "message": "Homepage config updated",
                 "data": item
-            })
+            }, default=str)
         }
 
     except Exception as e:
