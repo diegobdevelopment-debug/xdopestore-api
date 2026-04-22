@@ -1,23 +1,28 @@
 {
   "name": "xdopestore-api",
-  "version": "1.0.0",
-  "description": "This repository contains the backend for **Store API**, organized into separate **microservices** using the [Serverless Framework](https://www.serverless.com/).  \r Each service is independently deployable and versioned, making the project **scalable and modular**.",
-  "main": "index.js",
+  "version": "2.0.0",
+  "description": "xdope-store Express.js + MongoDB backend",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "nodemon server.js",
+    "start": "node server.js",
+    "seed": "node seed/seed.js"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/diegobdevelopment-debug/xdopestore-api.git"
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^1.41.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.2",
+    "express-async-errors": "^3.1.1",
+    "jsonwebtoken": "^9.0.2",
+    "method-override": "^3.0.0",
+    "mongoose": "^8.3.4",
+    "multer": "^1.4.5-lts.1",
+    "multer-storage-cloudinary": "^4.0.0",
+    "slugify": "^1.6.6"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/diegobdevelopment-debug/xdopestore-api/issues"
-  },
-  "homepage": "https://github.com/diegobdevelopment-debug/xdopestore-api#readme",
   "devDependencies": {
-    "serverless": "^3.39.0"
+    "nodemon": "^3.1.0"
   }
 }
