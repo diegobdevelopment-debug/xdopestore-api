@@ -33,20 +33,27 @@ async function buildContent() {
 // GET /home  or  GET /home/:slug
 router.get('/:slug?', async (req, res) => {
   const slug = req.params.slug || 'default';
+  const defaults = await buildContent();
   const page = await Homepage.findOne({ slug });
-  if (page && page.config && Object.keys(page.config).length > 0) {
-    return res.json({ slug, content: page.config, config: page.config });
+  const saved = (page && page.config && Object.keys(page.config).length > 0) ? page.config : {};
+  // Merge: saved values take priority, but fill in any missing top-level keys from defaults
+  const content = { ...defaults, ...saved };
+  // Filter empty strings from products_ids
+  if (Array.isArray(content.products_ids)) {
+    content.products_ids = content.products_ids.filter(Boolean);
   }
-  // No saved config — build from live DB data
-  const content = await buildContent();
-  res.json({ slug, content, config: content });
+  if (content.products_list && Array.isArray(content.products_list.product_ids)) {
+    content.products_list.product_ids = content.products_list.product_ids.filter(Boolean);
+  }
+  res.json({ id: slug, slug, content, config: content });
 });
 
-// PUT /home
-router.put('/', auth, adminOnly, async (req, res) => {
-  const { slug = 'default', config } = req.body;
+// PUT /home/:slug  or  PUT /home
+router.put('/:slug?', auth, adminOnly, async (req, res) => {
+  const slug = req.params.slug || req.body.slug || 'default';
+  const config = req.body.config || req.body.content;
   const page = await Homepage.findOneAndUpdate({ slug }, { config }, { new: true, upsert: true });
-  res.json(page);
+  res.json({ id: slug, slug, content: page.config, config: page.config });
 });
 
 module.exports = router;

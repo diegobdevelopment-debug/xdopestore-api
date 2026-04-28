@@ -157,21 +157,41 @@ router.get('/question-and-answer', emptyList);
 router.post('/question-and-answer', ok);
 router.post('/question-and-answer/feedback', ok);
 
-// GET /menu
+// Menu CRUD
+const Menu = require('../models/Menu');
+
 router.get('/menu', async (req, res) => {
-  res.json({
-    data: [
-      { id: 1, title: 'Home', path: '/', class: '0' },
-      { id: 2, title: 'Shop', path: '/collections', class: '0' },
-      { id: 3, title: 'About Us', path: '/about-us', class: '0' },
-      { id: 4, title: 'Contact', path: '/contact-us', class: '0' },
-    ],
-  });
+  let items = await Menu.find({ status: 1 }).sort({ sort_order: 1, createdAt: 1 });
+  if (items.length === 0) {
+    const defaults = [
+      { title: 'Home', path: '/', class: '0', sort_order: 0 },
+      { title: 'Shop', path: '/collections', class: '0', sort_order: 1 },
+      { title: 'About Us', path: '/about-us', class: '0', sort_order: 2 },
+      { title: 'Contact', path: '/contact-us', class: '0', sort_order: 3 },
+    ];
+    items = await Menu.insertMany(defaults);
+  }
+  res.json({ data: items });
 });
-router.post('/menu', ok);
-router.put('/menu/sort', ok);
-router.put('/menu/:id', ok);
-router.delete('/menu/:id', ok);
+router.post('/menu', auth, adminOnly, async (req, res) => {
+  const count = await Menu.countDocuments();
+  const item = await Menu.create({ ...req.body, sort_order: count });
+  res.status(201).json(item);
+});
+router.put('/menu/sort', auth, adminOnly, async (req, res) => {
+  const items = req.body?.data || req.body || [];
+  await Promise.all(items.map((item, i) => Menu.findByIdAndUpdate(item.id || item._id, { sort_order: i })));
+  res.json({ message: 'ok' });
+});
+router.put('/menu/:id', auth, adminOnly, async (req, res) => {
+  const item = await Menu.findByIdAndUpdate(req.params.id, req.body, { new: true });
+  if (!item) return res.status(404).json({ message: 'Menu item not found' });
+  res.json(item);
+});
+router.delete('/menu/:id', auth, adminOnly, async (req, res) => {
+  await Menu.findByIdAndDelete(req.params.id);
+  res.json({ message: 'ok' });
+});
 
 // GET /subscribe
 router.post('/subscribe', ok);
