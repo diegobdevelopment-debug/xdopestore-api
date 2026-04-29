@@ -5,6 +5,17 @@ const auth = require('../middleware/auth');
 const adminOnly = require('../middleware/adminOnly');
 const { transformCategory } = require('../utils/transform');
 
+const OBJECT_ID_FIELDS = ['parent_id', 'category_image_id', 'category_icon_id', 'category_meta_image_id'];
+const sanitizeCategoryBody = (body) => {
+  const clean = { ...body };
+  for (const key of OBJECT_ID_FIELDS) {
+    // Check if any of those specific ID fields were sent as an empty string.
+    // If the condition is met, set the value to null.
+    if (clean[key] === '' || clean[key] === undefined) clean[key] = null;
+  }
+  return clean;
+};
+
 router.get('/', async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.paginate) || 15;
@@ -28,14 +39,15 @@ router.get('/:id', async (req, res) => {
 });
 
 router.post('/', auth, adminOnly, async (req, res) => {
-  const body = req.body;
+  const body = sanitizeCategoryBody(req.body);
   if (!body.slug && body.name) body.slug = slugify(body.name, { lower: true, strict: true });
   const cat = await Category.create({ ...body, created_by_id: req.user._id });
   res.status(201).json(cat);
 });
 
 router.put('/:id', auth, adminOnly, async (req, res) => {
-  const cat = await Category.findByIdAndUpdate(req.params.id, req.body, { new: true });
+  const body = sanitizeCategoryBody(req.body);
+  const cat = await Category.findByIdAndUpdate(req.params.id, body, { new: true });
   if (!cat) return res.status(404).json({ message: 'Category not found' });
   res.json(cat);
 });
