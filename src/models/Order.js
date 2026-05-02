@@ -38,6 +38,12 @@ const orderSchema = new mongoose.Schema({
   status_id: { type: mongoose.Schema.Types.ObjectId, ref: 'OrderStatus' },
   notes: String,
   is_digital_only: { type: Boolean, default: false },
+  // Payment tracking
+  payment_transaction_id: { type: String, default: null },
+  payment_gateway_response: { type: mongoose.Schema.Types.Mixed, default: null },
+  payment_error: { type: String, default: null },
+  payment_initiated_at: { type: Date, default: null },
+  payment_completed_at: { type: Date, default: null },
 }, { timestamps: true, toJSON: { virtuals: true } });
 
 // Auto-increment order_number

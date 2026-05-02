@@ -18,17 +18,46 @@ const sanitizeCategoryBody = (body) => {
 
 router.get('/', async (req, res) => {
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.paginate) || 15;
+  const limit = parseInt(req.query.paginate) || 100;
   const filter = {};
   if (req.query.search) filter.name = new RegExp(req.query.search, 'i');
   if (req.query.status !== undefined) filter.status = req.query.status;
-  const total = await Category.countDocuments(filter);
-  const data = await Category.find(filter)
-    .skip((page - 1) * limit).limit(limit).sort({ createdAt: -1 })
-    .populate('parent_id', 'name')
-    .populate('category_image_id', 'asset_url original_url')
-    .populate('category_icon_id', 'asset_url original_url');
-  res.json({ current_page: page, last_page: Math.ceil(total / limit), total, per_page: limit, data: data.map(transformCategory) });
+  const Product = require('../models/Product');
+  const [total, data, countAgg] = await Promise.all([
+    Category.countDocuments(filter),
+    Category.find(filter)
+      .skip((page - 1) * limit).limit(limit).sort({ createdAt: 1 })
+      .populate('parent_id', 'name slug')
+      .populate('category_image_id', 'asset_url original_url')
+      .populate('category_icon_id', 'asset_url original_url'),
+    Product.aggregate([
+      { $match: { status: 1 } },
+      { $unwind: '$categories' },
+      { $group: { _id: '$categories', count: { $sum: 1 } } },
+    ]),
+  ]);
+  const countMap = {};
+  countAgg.forEach(c => { countMap[String(c._id)] = c.count; });
+  const transformed = data.map(cat => {
+    const t = transformCategory(cat);
+    t.products_count = countMap[String(cat._id)] || 0;
+    // Build subcategories array for nested display
+    t.subcategories = [];
+    return t;
+  });
+  // Attach subcategories to their parents
+  const byId = {};
+  transformed.forEach(c => { byId[String(c._id)] = c; });
+  const roots = [];
+  transformed.forEach(c => {
+    const parentId = c.parent_id?._id ? String(c.parent_id._id) : (c.parent_id ? String(c.parent_id) : null);
+    if (parentId && byId[parentId]) {
+      byId[parentId].subcategories.push(c);
+    } else {
+      roots.push(c);
+    }
+  });
+  res.json({ current_page: page, last_page: Math.ceil(total / limit), total, per_page: limit, data: transformed });
 });
 
 router.get('/:id', async (req, res) => {
