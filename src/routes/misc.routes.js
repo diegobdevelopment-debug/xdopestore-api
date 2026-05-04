@@ -5,8 +5,20 @@ const Order = require('../models/Order');
 const Tax = require('../models/Tax');
 const Tag = require('../models/Tag');
 const ThemeOption = require('../models/ThemeOption');
+const Question = require('../models/Question');
 const auth = require('../middleware/auth');
 const adminOnly = require('../middleware/adminOnly');
+const { transformTag } = require('../utils/transform');
+
+const transformQuestion = (q) => {
+  if (!q) return q;
+  const obj = q.toJSON ? q.toJSON() : q;
+  if (obj.createdAt !== undefined) obj.created_at = obj.createdAt;
+  if (obj.updatedAt !== undefined) obj.updated_at = obj.updatedAt;
+  // expose product summary under the `product` alias the dashboard table expects
+  if (obj.product_id && typeof obj.product_id === 'object') obj.product = obj.product_id;
+  return obj;
+};
 
 const emptyList = (req, res) => res.json({ current_page: 1, last_page: 1, total: 0, per_page: 15, data: [] });
 const emptyData = (req, res) => res.json({ data: [] });
@@ -69,23 +81,23 @@ router.get('/tag', async (req, res) => {
   if (req.query.type) filter.type = req.query.type;
   const total = await Tag.countDocuments(filter);
   const data = await Tag.find(filter).skip((page - 1) * limit).limit(limit).sort({ createdAt: -1 });
-  res.json({ current_page: page, last_page: Math.ceil(total / limit), total, per_page: limit, data });
+  res.json({ current_page: page, last_page: Math.ceil(total / limit), total, per_page: limit, data: data.map(transformTag) });
 });
 router.get('/tag/:id', async (req, res) => {
   const tag = await Tag.findById(req.params.id);
   if (!tag) return res.status(404).json({ message: 'Tag not found' });
-  res.json(tag);
+  res.json(transformTag(tag));
 });
 router.post('/tag', auth, adminOnly, async (req, res) => {
   const body = req.body;
   if (!body.slug && body.name) body.slug = slugify(body.name, { lower: true, strict: true });
   const tag = await Tag.create(body);
-  res.status(201).json(tag);
+  res.status(201).json(transformTag(tag));
 });
 router.put('/tag/:id', auth, adminOnly, async (req, res) => {
   const tag = await Tag.findByIdAndUpdate(req.params.id, req.body, { new: true });
   if (!tag) return res.status(404).json({ message: 'Tag not found' });
-  res.json(tag);
+  res.json(transformTag(tag));
 });
 router.delete('/tag/:id', auth, adminOnly, async (req, res) => {
   await Tag.findByIdAndDelete(req.params.id);
@@ -152,10 +164,123 @@ router.post('/faq', ok);
 router.put('/faq/:id', ok);
 router.delete('/faq/:id', ok);
 
-// GET /question-and-answer
-router.get('/question-and-answer', emptyList);
-router.post('/question-and-answer', ok);
-router.post('/question-and-answer/feedback', ok);
+// ───────────────────────── Question & Answer ─────────────────────────
+// GET /question-and-answer — list (filter by product_id, status=pending|answered, search)
+router.get('/question-and-answer', async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.paginate) || 15;
+  const filter = {};
+  if (req.query.product_id) filter.product_id = req.query.product_id;
+  if (req.query.search) filter.question = new RegExp(req.query.search, 'i');
+  if (req.query.status === 'pending') filter.status = 0;
+  else if (req.query.status === 'answered') filter.status = 1;
+  const total = await Question.countDocuments(filter);
+  const data = await Question.find(filter)
+    .skip((page - 1) * limit)
+    .limit(limit)
+    .sort({ createdAt: -1 })
+    .populate('product_id', 'name slug')
+    .populate('consumer_id', 'name email');
+  res.json({
+    current_page: page,
+    last_page: Math.ceil(total / limit),
+    total,
+    per_page: limit,
+    data: data.map(transformQuestion),
+  });
+});
+
+// GET /question-and-answer/:id
+router.get('/question-and-answer/:id', async (req, res) => {
+  const q = await Question.findById(req.params.id)
+    .populate('product_id', 'name slug')
+    .populate('consumer_id', 'name email');
+  if (!q) return res.status(404).json({ message: 'Question not found' });
+  res.json(transformQuestion(q));
+});
+
+// POST /question-and-answer — customer posts a question (must be logged in)
+router.post('/question-and-answer', auth, async (req, res) => {
+  const { question, product_id } = req.body;
+  if (!question || !product_id) {
+    return res.status(400).json({ message: 'question and product_id are required' });
+  }
+  const created = await Question.create({
+    question,
+    product_id,
+    consumer_id: req.user._id,
+    status: 0,
+  });
+  const populated = await created.populate([
+    { path: 'product_id', select: 'name slug' },
+    { path: 'consumer_id', select: 'name email' },
+  ]);
+  res.status(201).json(transformQuestion(populated));
+});
+
+// PUT /question-and-answer/:id — admin answers, or customer edits own (unanswered) question
+router.put('/question-and-answer/:id', auth, async (req, res) => {
+  const existing = await Question.findById(req.params.id);
+  if (!existing) return res.status(404).json({ message: 'Question not found' });
+
+  const isAdmin = req.user?.role?.name === 'admin' || req.user?.role?.slug === 'admin';
+  const isOwner = existing.consumer_id && existing.consumer_id.toString() === req.user._id.toString();
+
+  const update = {};
+  // Admin can set/edit the answer.
+  if (typeof req.body.answer === 'string') {
+    if (!isAdmin) return res.status(403).json({ message: 'Only admins can answer questions' });
+    update.answer = req.body.answer;
+    update.status = req.body.answer.trim().length > 0 ? 1 : 0;
+  }
+  // Owner (or admin) can edit the question text while it's still unanswered.
+  if (typeof req.body.question === 'string') {
+    if (!isOwner && !isAdmin) return res.status(403).json({ message: 'Forbidden' });
+    if (existing.answer && !isAdmin) {
+      return res.status(400).json({ message: 'Cannot edit an answered question' });
+    }
+    update.question = req.body.question;
+  }
+  if (Object.keys(update).length === 0) {
+    return res.status(400).json({ message: 'Nothing to update' });
+  }
+  const q = await Question.findByIdAndUpdate(req.params.id, update, { new: true })
+    .populate('product_id', 'name slug')
+    .populate('consumer_id', 'name email');
+  res.json(transformQuestion(q));
+});
+
+// DELETE /question-and-answer/:id — admin only
+router.delete('/question-and-answer/:id', auth, adminOnly, async (req, res) => {
+  await Question.findByIdAndDelete(req.params.id);
+  res.json({ message: 'Question deleted' });
+});
+
+// POST /question-and-answer/feedback — like / dislike a question (auth required)
+router.post('/question-and-answer/feedback', auth, async (req, res) => {
+  const { question_id, reaction } = req.body;
+  if (!question_id || !['liked', 'disliked'].includes(reaction)) {
+    return res.status(400).json({ message: 'question_id and reaction (liked|disliked) required' });
+  }
+  const q = await Question.findById(question_id);
+  if (!q) return res.status(404).json({ message: 'Question not found' });
+  const userKey = req.user._id.toString();
+  const prev = q.reactions.get(userKey);
+  if (prev === reaction) {
+    // Toggle off
+    q.reactions.delete(userKey);
+    if (reaction === 'liked') q.total_likes = Math.max(0, q.total_likes - 1);
+    else q.total_dislikes = Math.max(0, q.total_dislikes - 1);
+  } else {
+    if (prev === 'liked') q.total_likes = Math.max(0, q.total_likes - 1);
+    if (prev === 'disliked') q.total_dislikes = Math.max(0, q.total_dislikes - 1);
+    q.reactions.set(userKey, reaction);
+    if (reaction === 'liked') q.total_likes += 1;
+    else q.total_dislikes += 1;
+  }
+  await q.save();
+  res.json(transformQuestion(q));
+});
 
 // Menu CRUD
 const Menu = require('../models/Menu');
