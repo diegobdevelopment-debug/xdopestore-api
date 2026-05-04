@@ -2,6 +2,8 @@ const router = require('express').Router();
 const mongoose = require('mongoose');
 const slugify = require('slugify');
 const Product = require('../models/Product');
+const Category = require('../models/Category');
+const Brand = require('../models/Brand');
 const Attribute = require('../models/Attribute');
 const Review = require('../models/Review');
 const Order = require('../models/Order');
@@ -9,6 +11,55 @@ const OrderStatus = require('../models/OrderStatus');
 const auth = require('../middleware/auth');
 const adminOnly = require('../middleware/adminOnly');
 const { transformProduct } = require('../utils/transform');
+
+// Split a token list into ObjectIds and slugs.
+function splitIdsAndSlugs(tokens) {
+  const ids = [];
+  const slugs = [];
+  tokens.forEach((t) => {
+    if (mongoose.Types.ObjectId.isValid(t) && t.length === 24) ids.push(t);
+    else slugs.push(t);
+  });
+  return { ids, slugs };
+}
+
+// Given category slugs/ids, return a flat list of category ObjectIds that
+// includes the matched categories AND every descendant in the category tree.
+async function expandCategoryIds(tokens) {
+  const { ids: idTokens, slugs } = splitIdsAndSlugs(tokens);
+  const matched = await Category.find({
+    $or: [
+      { _id: { $in: idTokens.length ? idTokens : [] } },
+      { slug: { $in: slugs.length ? slugs : [] } },
+    ],
+  }).select('_id');
+  const seedIds = matched.map((c) => c._id.toString());
+  if (!seedIds.length) return [];
+
+  // Walk the parent->children graph once.
+  const allCats = await Category.find({}).select('_id parent_id');
+  const childrenMap = new Map();
+  allCats.forEach((c) => {
+    const parent = c.parent_id ? c.parent_id.toString() : null;
+    if (!parent) return;
+    if (!childrenMap.has(parent)) childrenMap.set(parent, []);
+    childrenMap.get(parent).push(c._id.toString());
+  });
+
+  const out = new Set(seedIds);
+  const stack = [...seedIds];
+  while (stack.length) {
+    const current = stack.pop();
+    const kids = childrenMap.get(current) || [];
+    for (const k of kids) {
+      if (!out.has(k)) {
+        out.add(k);
+        stack.push(k);
+      }
+    }
+  }
+  return Array.from(out);
+}
 
 // When attributes_ids is empty, look up Attribute docs by the variation attribute_value IDs
 async function resolveAttributesFromVariations(product) {
@@ -40,19 +91,68 @@ function paginate(query, req) {
   return { page, limit, skip: (page - 1) * limit };
 }
 
-function buildFilter(query) {
+async function buildFilter(query) {
   const filter = {};
   if (query.search) filter.name = new RegExp(query.search, 'i');
   if (query.status !== undefined) filter.status = Number(query.status);
-  if (query.category) filter.categories = query.category;
-  if (query.category_ids) {
-    const ids = String(query.category_ids).split(',').map(id => id.trim()).filter(Boolean);
+
+  // Storefront sends `category=slug1,slug2` — resolve slugs to ObjectIds and
+  // expand each match to include its descendant categories.
+  if (query.category) {
+    const tokens = String(query.category).split(',').map((s) => s.trim()).filter(Boolean);
+    const ids = await expandCategoryIds(tokens);
     filter.categories = { $in: ids };
   }
-  if (query.brand) filter.brand_id = query.brand;
+
+  // Homepage / direct id usage: `category_ids=id1,id2` — already real ObjectIds.
+  if (query.category_ids) {
+    const ids = String(query.category_ids).split(',').map((id) => id.trim()).filter(Boolean);
+    filter.categories = { $in: ids };
+  }
+
+  // Brand filter accepts slugs or ids, comma-separated.
+  if (query.brand) {
+    const tokens = String(query.brand).split(',').map((s) => s.trim()).filter(Boolean);
+    const { ids: idTokens, slugs } = splitIdsAndSlugs(tokens);
+    const matched = slugs.length
+      ? await Brand.find({ slug: { $in: slugs } }).select('_id')
+      : [];
+    const allIds = [...idTokens, ...matched.map((b) => b._id.toString())];
+    filter.brand_id = { $in: allIds };
+  }
+
+  // Price filter — tokens look like "min-max" with optional empty bound
+  // (e.g. "0-100000", "100000-200000", "1000000-" for "and up"). We compare
+  // against the *effective* (sale) price the customer actually sees on the
+  // card: sale_price when it's set and > 0, otherwise price.
+  if (query.price) {
+    const tokens = String(query.price).split(',').map((s) => s.trim()).filter(Boolean);
+    const ranges = tokens
+      .map((tok) => {
+        const [lo, hi] = tok.split('-');
+        const min = lo === '' || lo === undefined ? null : Number(lo);
+        const max = hi === '' || hi === undefined ? null : Number(hi);
+        if (min !== null && Number.isNaN(min)) return null;
+        if (max !== null && Number.isNaN(max)) return null;
+        return { min, max };
+      })
+      .filter(Boolean);
+    if (ranges.length) {
+      const effectivePrice = {
+        $cond: [{ $gt: [{ $ifNull: ['$sale_price', 0] }, 0] }, '$sale_price', '$price'],
+      };
+      filter.$or = ranges.map(({ min, max }) => {
+        const conds = [];
+        if (min !== null) conds.push({ $gte: [effectivePrice, min] });
+        if (max !== null) conds.push({ $lte: [effectivePrice, max] });
+        return { $expr: { $and: conds } };
+      });
+    }
+  }
+
   if (query.is_featured) filter.is_featured = query.is_featured === 'true';
   if (query.is_trending) filter.is_trending = query.is_trending === 'true';
-  if (query.ids) filter._id = { $in: query.ids.split(',').map(id => id.trim()).filter(Boolean) };
+  if (query.ids) filter._id = { $in: query.ids.split(',').map((id) => id.trim()).filter(Boolean) };
   return filter;
 }
 
@@ -104,6 +204,17 @@ async function attachReviews(product, userId) {
   };
 }
 
+// GET /product/price-range  — min/max price across active products. Used by
+// the storefront to build dynamic Price filter buckets. Must come before /:id.
+router.get('/price-range', async (req, res) => {
+  const result = await Product.aggregate([
+    { $match: { status: 1, price: { $gt: 0 } } },
+    { $group: { _id: null, min: { $min: '$price' }, max: { $max: '$price' } } },
+  ]);
+  if (!result.length) return res.json({ min: 0, max: 0 });
+  res.json({ min: result[0].min, max: result[0].max });
+});
+
 // GET /product/minify/list  — must be before /:id
 router.get('/minify/list', async (req, res) => {
   const products = await Product.find({ status: 1 })
@@ -131,7 +242,32 @@ router.get('/slug/:slug', async (req, res) => {
 // GET /product
 router.get('/', async (req, res) => {
   const { page, limit, skip } = paginate(req.query, req);
-  const filter = buildFilter(req.query);
+  const filter = await buildFilter(req.query);
+
+  // Rating filter — sidebar sends a comma-list of star values like "5,4".
+  // Treat the smallest selected star as the threshold ("4 stars and up"),
+  // then narrow the product set to those with avg review rating >= threshold.
+  if (req.query.rating) {
+    const stars = String(req.query.rating)
+      .split(',')
+      .map((n) => Number(n))
+      .filter((n) => n >= 1 && n <= 5);
+    if (stars.length) {
+      const threshold = Math.min(...stars);
+      const eligible = await Review.aggregate([
+        { $group: { _id: '$product_id', avg: { $avg: '$rating' } } },
+        { $match: { avg: { $gte: threshold } } },
+      ]);
+      const allowedIds = eligible.map((r) => r._id);
+      if (filter._id?.$in) {
+        const allowedSet = new Set(allowedIds.map((id) => String(id)));
+        filter._id.$in = filter._id.$in.filter((id) => allowedSet.has(String(id)));
+      } else {
+        filter._id = { $in: allowedIds };
+      }
+    }
+  }
+
   const [total, data] = await Promise.all([
     Product.countDocuments(filter),
     Product.find(filter)
@@ -142,7 +278,29 @@ router.get('/', async (req, res) => {
       .populate('product_thumbnail_id', 'asset_url original_url')
       .populate('product_images', 'asset_url original_url'),
   ]);
-  res.json({ current_page: page, last_page: Math.ceil(total / limit), total, per_page: limit, data: data.map(transformProduct) });
+
+  // Lightweight review enrichment so list cards can show the real avg rating
+  // and review count. One aggregation per page, keyed by product_id.
+  const productIds = data.map((p) => p._id);
+  const stats = productIds.length
+    ? await Review.aggregate([
+        { $match: { product_id: { $in: productIds } } },
+        { $group: { _id: '$product_id', count: { $sum: 1 }, avg: { $avg: '$rating' } } },
+      ])
+    : [];
+  const statsMap = new Map(stats.map((s) => [String(s._id), s]));
+
+  const transformed = data.map((p) => {
+    const obj = transformProduct(p);
+    const s = statsMap.get(String(p._id));
+    if (s) {
+      obj.reviews_count = s.count;
+      obj.rating_count = Math.round((s.avg || 0) * 10) / 10;
+    }
+    return obj;
+  });
+
+  res.json({ current_page: page, last_page: Math.ceil(total / limit), total, per_page: limit, data: transformed });
 });
 
 // GET /product/:idOrSlug
