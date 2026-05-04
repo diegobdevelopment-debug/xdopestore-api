@@ -11,7 +11,7 @@ attributeValueSchema.virtual('id').get(function () { return this._id.toHexString
 const attributeSchema = new mongoose.Schema({
   name: { type: String, required: true },
   slug: String,
-  style: { type: String, enum: ['rectangle', 'circle', 'image', 'dropdown'], default: 'rectangle' },
+  style: { type: String, enum: ['rectangle', 'circle', 'image', 'dropdown', 'radio', 'color'], default: 'rectangle' },
   status: { type: Number, default: 1 },
   attribute_values: [attributeValueSchema],
   created_by_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
