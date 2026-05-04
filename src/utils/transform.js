@@ -16,7 +16,11 @@ function transformProduct(p) {
   addTimestampAliases(obj);
   obj.product_thumbnail = obj.product_thumbnail_id || null;
   obj.size_chart_image = obj.size_chart_image_id || null;
-  obj.product_galleries = Array.isArray(obj.product_images) ? obj.product_images : [];
+  const galleries = Array.isArray(obj.product_images) ? obj.product_images : [];
+  const thumbnail = obj.product_thumbnail_id || null;
+  const thumbnailId = thumbnail ? String(thumbnail._id || thumbnail.id || thumbnail) : null;
+  const alreadyIncluded = thumbnailId && galleries.some((g) => String(g._id || g.id || g) === thumbnailId);
+  obj.product_galleries = thumbnail && !alreadyIncluded ? [thumbnail, ...galleries] : galleries;
   // Build attributes array for storefront variation selectors
   const hasPopulatedAttributes = Array.isArray(obj.attributes_ids) && obj.attributes_ids.length > 0 && obj.attributes_ids[0]?.name;
   if (hasPopulatedAttributes) {
