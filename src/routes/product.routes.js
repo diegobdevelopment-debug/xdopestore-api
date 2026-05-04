@@ -121,11 +121,13 @@ router.get('/slug/:slug', async (req, res) => {
     .populate('product_thumbnail_id')
     .populate('size_chart_image_id')
     .populate('product_images')
-    .populate('tax_id');
+    .populate('tax_id')
+    .populate('attributes_ids');
   if (!product) return res.status(404).json({ message: 'Product not found' });
   const userId = req.user?._id;
   const enriched = await attachReviews(product, userId);
-  res.json(transformProduct(enriched));
+  const resolved = await resolveAttributesFromVariations(enriched);
+  res.json(transformProduct(resolved));
 });
 
 // GET /product
@@ -140,7 +142,8 @@ router.get('/', async (req, res) => {
       .populate('brand_id', 'name slug')
       .populate('categories', 'name slug')
       .populate('product_thumbnail_id', 'asset_url original_url')
-      .populate('product_images', 'asset_url original_url'),
+      .populate('product_images', 'asset_url original_url')
+      .populate('attributes_ids'),
   ]);
   res.json({ current_page: page, last_page: Math.ceil(total / limit), total, per_page: limit, data: data.map(transformProduct) });
 });
