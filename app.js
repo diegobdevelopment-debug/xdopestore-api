@@ -31,6 +31,7 @@ app.use('/attribute', require('./src/routes/attribute.routes'));
 app.use('/cart', require('./src/routes/cart.routes'));
 app.use('/checkout', require('./src/routes/checkout.routes'));
 app.use('/order', require('./src/routes/order.routes'));
+app.use('/payment', require('./src/routes/payment.routes'));
 app.use('/', require('./src/routes/user.routes'));
 app.use('/role', require('./src/routes/role.routes'));
 app.use('/coupon', require('./src/routes/coupon.routes'));

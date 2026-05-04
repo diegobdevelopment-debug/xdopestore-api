@@ -4,6 +4,8 @@ const slugify = require('slugify');
 const Product = require('../models/Product');
 const Attribute = require('../models/Attribute');
 const Review = require('../models/Review');
+const Order = require('../models/Order');
+const OrderStatus = require('../models/OrderStatus');
 const auth = require('../middleware/auth');
 const adminOnly = require('../middleware/adminOnly');
 const { transformProduct } = require('../utils/transform');
@@ -43,6 +45,10 @@ function buildFilter(query) {
   if (query.search) filter.name = new RegExp(query.search, 'i');
   if (query.status !== undefined) filter.status = Number(query.status);
   if (query.category) filter.categories = query.category;
+  if (query.category_ids) {
+    const ids = String(query.category_ids).split(',').map(id => id.trim()).filter(Boolean);
+    filter.categories = { $in: ids };
+  }
   if (query.brand) filter.brand_id = query.brand;
   if (query.is_featured) filter.is_featured = query.is_featured === 'true';
   if (query.is_trending) filter.is_trending = query.is_trending === 'true';
@@ -65,9 +71,16 @@ async function attachReviews(product, userId) {
   const review_ratings = [0, 0, 0, 0, 0];
   reviews.forEach(r => { if (r.rating >= 1 && r.rating <= 5) review_ratings[r.rating - 1]++; });
 
-  const can_review = userId
-    ? !reviews.some(r => r.consumer_id?._id?.toString() === userId.toString())
-    : false;
+  let hasPurchased = false;
+  if (userId) {
+    const delivered = await OrderStatus.findOne({ slug: 'delivered' });
+    hasPurchased = !!(await Order.findOne({
+      consumer_id: userId,
+      'products.product_id': product._id,
+      status_id: delivered?._id,
+    }));
+  }
+  const can_review = hasPurchased && !reviews.some(r => r.consumer_id?._id?.toString() === userId?.toString());
 
   const user_review = userId
     ? reviews.find(r => r.consumer_id?._id?.toString() === userId.toString()) || null
