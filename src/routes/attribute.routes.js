@@ -3,6 +3,7 @@ const slugify = require('slugify');
 const Attribute = require('../models/Attribute');
 const auth = require('../middleware/auth');
 const adminOnly = require('../middleware/adminOnly');
+const { transformAttribute } = require('../utils/transform');
 
 router.get('/', async (req, res) => {
   const page = parseInt(req.query.page) || 1;
@@ -11,13 +12,13 @@ router.get('/', async (req, res) => {
   if (req.query.search) filter.name = new RegExp(req.query.search, 'i');
   const total = await Attribute.countDocuments(filter);
   const data = await Attribute.find(filter).skip((page - 1) * limit).limit(limit).sort({ createdAt: -1 });
-  res.json({ current_page: page, last_page: Math.ceil(total / limit), total, per_page: limit, data });
+  res.json({ current_page: page, last_page: Math.ceil(total / limit), total, per_page: limit, data: data.map(transformAttribute) });
 });
 
 router.get('/:id', async (req, res) => {
   const attr = await Attribute.findById(req.params.id);
   if (!attr) return res.status(404).json({ message: 'Attribute not found' });
-  res.json(attr);
+  res.json(transformAttribute(attr));
 });
 
 router.post('/', auth, adminOnly, async (req, res) => {
@@ -32,7 +33,7 @@ router.post('/', auth, adminOnly, async (req, res) => {
   }
   delete body.value;
   const attr = await Attribute.create({ ...body, created_by_id: req.user._id });
-  res.status(201).json(attr);
+  res.status(201).json(transformAttribute(attr));
 });
 
 router.put('/:id', auth, adminOnly, async (req, res) => {
@@ -47,7 +48,7 @@ router.put('/:id', auth, adminOnly, async (req, res) => {
   delete body.value;
   const attr = await Attribute.findByIdAndUpdate(req.params.id, body, { new: true });
   if (!attr) return res.status(404).json({ message: 'Attribute not found' });
-  res.json(attr);
+  res.json(transformAttribute(attr));
 });
 
 router.delete('/:id', auth, adminOnly, async (req, res) => {

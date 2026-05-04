@@ -124,4 +124,18 @@ function transformReview(r) {
   return obj;
 }
 
-module.exports = { transformProduct, transformCategory, transformBrand, transformBlog, transformUser, transformReview };
+function transformAttribute(a) {
+  if (!a) return a;
+  const obj = a.toJSON ? a.toJSON() : a;
+  addTimestampAliases(obj);
+  return obj;
+}
+
+function transformTag(t) {
+  if (!t) return t;
+  const obj = t.toJSON ? t.toJSON() : t;
+  addTimestampAliases(obj);
+  return obj;
+}
+
+module.exports = { transformProduct, transformCategory, transformBrand, transformBlog, transformUser, transformReview, transformAttribute, transformTag };
