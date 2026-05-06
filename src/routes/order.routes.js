@@ -129,6 +129,11 @@ router.put('/:id', auth, async (req, res) => {
   await handleStatusUpdate(req, res);
 });
 
+// POST /order/:id — method-override from admin dashboard (sends _method:put)
+router.post('/:id', auth, async (req, res) => {
+  await handleStatusUpdate(req, res);
+});
+
 async function handleStatusUpdate(req, res) {
   const param = req.params.id;
   const { order_status_id, note, changed_at } = req.body;
