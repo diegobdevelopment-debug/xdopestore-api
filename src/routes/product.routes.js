@@ -159,7 +159,7 @@ async function buildFilter(query) {
 // Fetch review stats and inject into product object
 async function attachReviews(product, userId) {
   const reviews = await Review.find({ product_id: product._id })
-    .populate('consumer_id', 'name profile_image_id')
+    .populate({ path: 'consumer_id', select: 'name profile_image_id', populate: { path: 'profile_image_id', select: 'original_url' } })
     .sort({ createdAt: -1 });
 
   const reviews_count = reviews.length;
@@ -198,7 +198,9 @@ async function attachReviews(product, userId) {
       id: r._id,
       rating: r.rating,
       description: r.description,
-      consumer: r.consumer_id ? { name: r.consumer_id.name } : { name: 'Anonymous' },
+      consumer: r.consumer_id
+        ? { name: r.consumer_id.name, profile_image: r.consumer_id.profile_image_id || null }
+        : { name: 'Anonymous', profile_image: null },
       created_at: r.createdAt,
     })),
   };
@@ -232,13 +234,16 @@ router.get('/slug/:slug', async (req, res) => {
     .populate('product_thumbnail_id')
     .populate('size_chart_image_id')
     .populate('product_images')
+    .populate('product_meta_image_id')
     .populate('tax_id')
     .populate('attributes_ids');
   if (!product) return res.status(404).json({ message: 'Product not found' });
   const userId = req.user?._id;
   const enriched = await attachReviews(product, userId);
   const resolved = await resolveAttributesFromVariations(enriched);
-  res.json(transformProduct(resolved));
+  const result = transformProduct(resolved);
+  result.product_meta_image = result.product_meta_image_id || null;
+  res.json(result);
 });
 
 // GET /product

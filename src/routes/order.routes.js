@@ -1,19 +1,57 @@
 const router = require('express').Router();
+const mongoose = require('mongoose');
 const Order = require('../models/Order');
 const Cart = require('../models/Cart');
 const OrderStatus = require('../models/OrderStatus');
 const auth = require('../middleware/auth');
 
+function transformProduct(p) {
+  const item = p.toJSON ? p.toJSON() : { ...p };
+  const productDoc = item.product_id; // populated or ObjectId
+  return {
+    id: item._id,
+    product_id: productDoc?._id || productDoc,
+    variation_id: item.variation_id,
+    name: item.name,
+    product_thumbnail: productDoc?.product_thumbnail_id || null,
+    is_return: productDoc?.is_return ?? 1,
+    pivot: {
+      single_price: item.price,
+      quantity: item.quantity,
+      subtotal: item.sub_total,
+      variation: null,
+      refund_status: item.refund_status || null,
+    },
+  };
+}
+
 function transformOrder(order) {
   const obj = order.toJSON ? order.toJSON() : order;
-  // Admin dashboard expects order_status as the populated object
   obj.order_status = obj.status_id || null;
-  // Expect array of tracking activities (stub — can be populated from a future model)
+  obj.consumer = obj.consumer_id || null;
+  obj.created_at = obj.createdAt;
   if (!obj.order_status_activities) obj.order_status_activities = [];
-  // Expect sub_orders (multi-vendor — empty for now)
   if (!obj.sub_orders) obj.sub_orders = [];
+  if (Array.isArray(obj.products)) {
+    obj.products = order.products.map(transformProduct);
+  }
   return obj;
 }
+
+// Returns a Mongoose Query (not yet executed) or null
+function findOrderQuery(param) {
+  const isObjectId = mongoose.Types.ObjectId.isValid(param) && String(new mongoose.Types.ObjectId(param)) === param;
+  if (isObjectId) return Order.findById(param);
+  const num = parseInt(param, 10);
+  if (!isNaN(num)) return Order.findOne({ order_number: num });
+  return null;
+}
+
+const populateDetail = [
+  { path: 'consumer_id', select: 'name email phone' },
+  { path: 'status_id' },
+  { path: 'products.product_id', select: 'name product_thumbnail_id is_return', populate: { path: 'product_thumbnail_id', select: 'original_url' } },
+];
 
 // GET /order
 router.get('/', auth, async (req, res) => {
@@ -32,7 +70,6 @@ router.get('/', auth, async (req, res) => {
 
 // POST /order — create new order
 router.post('/', auth, async (req, res) => {
-  // If _method override sent us here for a PUT, handle update instead
   if (req.body && req.body.order_status_id !== undefined) {
     return handleStatusUpdate(req, res);
   }
@@ -70,15 +107,15 @@ router.post('/', auth, async (req, res) => {
   });
 
   await Cart.deleteMany({ consumer_id: req.user._id });
-  const populated = await Order.findById(order._id).populate('consumer_id', 'name email phone').populate('status_id');
+  const populated = await Order.findById(order._id).populate(populateDetail);
   res.status(201).json(transformOrder(populated));
 });
 
-// GET /order/:id
+// GET /order/:id — supports MongoDB _id or order_number
 router.get('/:id', auth, async (req, res) => {
-  const order = await Order.findById(req.params.id)
-    .populate('consumer_id', 'name email phone')
-    .populate('status_id');
+  const q = findOrderQuery(req.params.id);
+  if (!q) return res.status(404).json({ message: 'Order not found' });
+  const order = await q.populate(populateDetail);
   if (!order) return res.status(404).json({ message: 'Order not found' });
   const isAdmin = req.user.role?.name === 'admin';
   if (!isAdmin && order.consumer_id._id.toString() !== req.user._id.toString()) {
@@ -87,29 +124,37 @@ router.get('/:id', auth, async (req, res) => {
   res.json(transformOrder(order));
 });
 
-// PUT /order/:id  — update order status (admin)
-// Also reached via POST + _method:put from admin dashboard
+// PUT /order/:id — update order status (admin)
 router.put('/:id', auth, async (req, res) => {
   await handleStatusUpdate(req, res);
 });
 
+// POST /order/:id — method-override from admin dashboard (sends _method:put)
+router.post('/:id', auth, async (req, res) => {
+  await handleStatusUpdate(req, res);
+});
+
 async function handleStatusUpdate(req, res) {
-  const orderId = req.params.id;
+  const param = req.params.id;
   const { order_status_id, note, changed_at } = req.body;
 
-  if (!orderId) return res.status(422).json({ message: 'Order ID required' });
+  if (!param) return res.status(422).json({ message: 'Order ID required' });
 
   let statusId = order_status_id;
-  // order_status_id can be an object { id, name } or a plain ID
   if (typeof order_status_id === 'object' && order_status_id?.id) {
     statusId = order_status_id.id;
   }
 
+  const q = findOrderQuery(param);
+  if (!q) return res.status(404).json({ message: 'Order not found' });
+  const found = await q;
+  if (!found) return res.status(404).json({ message: 'Order not found' });
+
   const order = await Order.findByIdAndUpdate(
-    orderId,
+    found._id,
     { status_id: statusId },
     { new: true }
-  ).populate('consumer_id', 'name email phone').populate('status_id');
+  ).populate(populateDetail);
 
   if (!order) return res.status(404).json({ message: 'Order not found' });
   res.json(transformOrder(order));

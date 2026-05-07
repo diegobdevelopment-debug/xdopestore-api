@@ -90,6 +90,7 @@ function transformCategory(c) {
   obj.media = media;
   obj.category_image = obj.category_image_id || null;
   obj.category_icon = obj.category_icon_id || null;
+  obj.category_meta_image = obj.category_meta_image_id || null;
   return obj;
 }
 

@@ -66,6 +66,19 @@ router.put('/themeOptions', auth, adminOnly, async (req, res) => {
   }
   res.json({ id: doc._id, options: doc.options });
 });
+// POST /themeOptions — admin sends POST with _method:put in body
+router.post('/themeOptions', auth, adminOnly, async (req, res) => {
+  const incoming = req.body.options || {};
+  let doc = await ThemeOption.findOne();
+  if (!doc) {
+    doc = await ThemeOption.create({ options: incoming });
+  } else {
+    doc.options = incoming;
+    doc.markModified('options');
+    await doc.save();
+  }
+  res.json({ id: doc._id, options: doc.options });
+});
 
 // GET /theme
 router.get('/theme', (req, res) => res.json({ current_page: 1, last_page: 1, total: 1, per_page: 15, data: [{ id: '1', _id: '1', name: 'Fashion One', slug: 'fashion_one', status: 1 }] }));
