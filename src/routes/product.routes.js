@@ -234,13 +234,16 @@ router.get('/slug/:slug', async (req, res) => {
     .populate('product_thumbnail_id')
     .populate('size_chart_image_id')
     .populate('product_images')
+    .populate('product_meta_image_id')
     .populate('tax_id')
     .populate('attributes_ids');
   if (!product) return res.status(404).json({ message: 'Product not found' });
   const userId = req.user?._id;
   const enriched = await attachReviews(product, userId);
   const resolved = await resolveAttributesFromVariations(enriched);
-  res.json(transformProduct(resolved));
+  const result = transformProduct(resolved);
+  result.product_meta_image = result.product_meta_image_id || null;
+  res.json(result);
 });
 
 // GET /product

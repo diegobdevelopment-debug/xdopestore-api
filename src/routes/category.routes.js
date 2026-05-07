@@ -60,6 +60,13 @@ router.get('/', async (req, res) => {
   res.json({ current_page: page, last_page: Math.ceil(total / limit), total, per_page: limit, data: transformed });
 });
 
+router.get('/slug/:slug', async (req, res) => {
+  const cat = await Category.findOne({ slug: req.params.slug })
+    .populate('parent_id').populate('category_image_id').populate('category_icon_id').populate('category_meta_image_id');
+  if (!cat) return res.status(404).json({ message: 'Category not found' });
+  res.json(transformCategory(cat));
+});
+
 router.get('/:id', async (req, res) => {
   const cat = await Category.findById(req.params.id)
     .populate('parent_id').populate('category_image_id').populate('category_icon_id');

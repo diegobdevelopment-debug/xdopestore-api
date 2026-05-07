@@ -11,6 +11,11 @@ const categorySchema = new mongoose.Schema({
   category_icon_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Attachment', default: null },
   meta_title: String,
   meta_description: String,
+  meta_keywords: String,
+  og_title: String,
+  og_description: String,
+  canonical_url: String,
+  robots: { type: String, default: 'index, follow' },
   created_by_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true, toJSON: { virtuals: true } });
 
