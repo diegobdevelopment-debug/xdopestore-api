@@ -24,27 +24,22 @@ const emptyList = (req, res) => res.json({ current_page: 1, last_page: 1, total:
 const emptyData = (req, res) => res.json({ data: [] });
 const ok = (req, res) => res.json({ message: 'ok' });
 
-// GET /country — static list (used by address/checkout forms)
+// GET /country — full country + nested state catalog used by address/checkout forms.
+// The storefront expects `country.state` to already be present so the state
+// dropdown can be derived without a second request.
+const { COUNTRIES, findCountry } = require('../data/countries');
 router.get('/country', async (req, res) => {
-  res.json({
-    data: [
-      { id: 1, name: 'United States', sortname: 'US', phone_code: '1' },
-      { id: 2, name: 'United Kingdom', sortname: 'GB', phone_code: '44' },
-      { id: 3, name: 'Canada', sortname: 'CA', phone_code: '1' },
-      { id: 4, name: 'Australia', sortname: 'AU', phone_code: '61' },
-      { id: 5, name: 'Germany', sortname: 'DE', phone_code: '49' },
-      { id: 6, name: 'France', sortname: 'FR', phone_code: '33' },
-      { id: 7, name: 'India', sortname: 'IN', phone_code: '91' },
-      { id: 8, name: 'Brazil', sortname: 'BR', phone_code: '55' },
-      { id: 9, name: 'Mexico', sortname: 'MX', phone_code: '52' },
-      { id: 10, name: 'Japan', sortname: 'JP', phone_code: '81' },
-    ],
-  });
+  res.json({ data: COUNTRIES });
 });
 
-// GET /state — filtered by country_id
+// GET /state — optionally filter by country_id
 router.get('/state', async (req, res) => {
-  res.json({ data: [] });
+  const { country_id } = req.query;
+  if (country_id) {
+    const c = findCountry(country_id);
+    return res.json({ data: c?.state || [] });
+  }
+  res.json({ data: COUNTRIES.flatMap((c) => c.state || []) });
 });
 
 // GET /themeOptions

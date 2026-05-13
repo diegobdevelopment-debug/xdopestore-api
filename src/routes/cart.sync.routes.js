@@ -17,10 +17,15 @@ async function getCartItems(userId) {
   });
 }
 
-// POST /sync/cart — merge guest cart into server cart on login
+// POST /sync/cart — merge guest cart into server cart on login.
+// Accepts the payload under either `cart` or `items` for client compatibility.
 router.post('/sync/cart', auth, async (req, res) => {
-  const { cart = [] } = req.body;
-  for (const item of cart) {
+  const payload = Array.isArray(req.body?.cart)
+    ? req.body.cart
+    : Array.isArray(req.body?.items)
+      ? req.body.items
+      : [];
+  for (const item of payload) {
     const product = await Product.findById(item.product_id);
     if (!product) continue;
     const price = product.sale_price || product.price;

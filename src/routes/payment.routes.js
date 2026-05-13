@@ -5,22 +5,88 @@ const OrderStatus = require('../models/OrderStatus');
 const Address = require('../models/Address');
 const auth = require('../middleware/auth');
 const { getGateway } = require('../services/payment/PaymentFactory');
+const { findCountry, findState } = require('../data/countries');
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-async function resolveAddress(addrInput, addrId, userId) {
-  if (addrInput && addrInput.street) return addrInput;
+// Flatten an Address document (or inline body) to the plain object stored on the
+// Order. State/country are kept as { id, name } so they survive without the
+// catalog at query time.
+function flattenAddressDoc(addr) {
+  if (!addr) return null;
+  const out = addr.toObject ? addr.toObject({ virtuals: true }) : addr;
+  return {
+    title: out.title,
+    street: out.street,
+    city: out.city,
+    pincode: out.pincode,
+    phone: out.phone,
+    country_code: out.country_code,
+    country: out.country || (out.country_id ? { id: out.country_id, name: out.country_name } : null),
+    state: out.state || (out.state_id ? { id: out.state_id, name: out.state_name } : null),
+  };
+}
+
+// Resolve inline-form values (country_id / state_id) to the same shape we store.
+function flattenInlineAddress(input) {
+  if (!input || !input.street) return null;
+  const country = findCountry(input.country_id);
+  const state = findState(input.country_id, input.state_id);
+  return {
+    title: input.title,
+    street: input.street,
+    city: input.city,
+    pincode: input.pincode ? String(input.pincode) : '',
+    phone: input.phone ? String(input.phone) : '',
+    country_code: input.country_code,
+    country: country ? { id: country.id, name: country.name } : null,
+    state: state ? { id: state.id, name: state.name } : null,
+  };
+}
+
+// Persist a fresh inline address to the user's address book so the next
+// checkout pre-selects it. Returns the saved Address document (or null).
+async function persistInlineAddress(input, userId) {
+  if (!input || !input.street) return null;
+  const country = findCountry(input.country_id);
+  const state = findState(input.country_id, input.state_id);
+  const existingCount = await Address.countDocuments({ user_id: userId });
+  return Address.create({
+    user_id: userId,
+    title: input.title || 'Checkout',
+    street: input.street,
+    city: input.city,
+    pincode: input.pincode ? String(input.pincode) : '',
+    phone: input.phone ? String(input.phone) : '',
+    country_code: input.country_code,
+    country_id: country ? country.id : null,
+    state_id: state ? state.id : null,
+    country_name: country ? country.name : '',
+    state_name: state ? state.name : '',
+    is_default: existingCount === 0,
+  });
+}
+
+async function resolveAddress(addrInput, addrId, userId, { saveIfInline = false } = {}) {
+  if (addrInput && addrInput.street) {
+    if (saveIfInline) {
+      try { await persistInlineAddress(addrInput, userId); }
+      catch (e) { console.warn('[payment] could not persist inline address:', e.message); }
+    }
+    return flattenInlineAddress(addrInput);
+  }
   if (addrId) {
     const addr = await Address.findOne({ _id: addrId, user_id: userId });
-    if (addr) return { title: addr.title, street: addr.street, city: addr.city, state: addr.state, pincode: addr.pincode, country: addr.country, phone: addr.phone, country_code: addr.country_code };
+    if (addr) return flattenAddressDoc(addr);
   }
   return null;
 }
 
 async function buildOrderFromCart(userId, body) {
   const { billing_address, billing_address_id, shipping_address, shipping_address_id, payment_method, coupon_total_discount = 0, shipping_total = 0, notes } = body;
-  const resolvedBilling = await resolveAddress(billing_address, billing_address_id, userId);
-  const resolvedShipping = await resolveAddress(shipping_address, shipping_address_id || billing_address_id, userId);
+  // Persist inline checkout addresses so the user sees them pre-selected next time.
+  const resolvedBilling = await resolveAddress(billing_address, billing_address_id, userId, { saveIfInline: true });
+  const resolvedShipping = await resolveAddress(shipping_address, shipping_address_id || billing_address_id, userId, { saveIfInline: true });
   const cartItems = await Cart.find({ consumer_id: userId }).populate('product_id');
   if (!cartItems.length) return null;
 
