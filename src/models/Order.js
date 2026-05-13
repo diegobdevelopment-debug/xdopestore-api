@@ -9,13 +9,17 @@ const orderProductSchema = new mongoose.Schema({
   sub_total: Number,
 }, { _id: false });
 
+// Stores a snapshot of the address at the time the order was placed.
+// `state` / `country` are `{ id, name }` objects so storefront views can show
+// names even after the country catalog changes. They remain `Mixed` so the
+// schema also accepts legacy plain-string values from earlier orders.
 const addressSubSchema = new mongoose.Schema({
   title: String,
   street: String,
   city: String,
-  state: String,
+  state: mongoose.Schema.Types.Mixed,
   pincode: String,
-  country: String,
+  country: mongoose.Schema.Types.Mixed,
   phone: String,
   country_code: String,
 }, { _id: false });

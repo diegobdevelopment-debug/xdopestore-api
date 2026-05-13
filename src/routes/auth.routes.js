@@ -38,6 +38,7 @@ router.post('/register', async (req, res) => {
 router.get('/self', auth, async (req, res) => {
   const { transformUser } = require('../utils/transform');
   const { resolvePermissions, PERMISSIONS } = require('../data/permissions');
+  const Address = require('../models/Address');
   const user = await require('../models/User').findById(req.user._id)
     .populate('role')
     .populate('profile_image_id', 'asset_url original_url')
@@ -46,6 +47,9 @@ router.get('/self', auth, async (req, res) => {
   // Admin role (system_reserve='1') gets all permissions
   const isAdmin = user.role?.system_reserve === '1';
   obj.permission = isAdmin ? PERMISSIONS : resolvePermissions(user.role?.permissions || []);
+  // Inline the user's saved addresses so the storefront account & checkout pages
+  // can pre-fill / preselect without an extra request.
+  obj.address = await Address.find({ user_id: req.user._id }).sort({ is_default: -1, createdAt: -1 });
   res.json(obj);
 });
 
